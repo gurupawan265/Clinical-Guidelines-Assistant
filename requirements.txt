@@ -9,3 +9,7 @@ pypdf
 langchain-chroma
 langchain-huggingface
 sentence-transformers
+langchain-ollama
+transformers
+torch
+
