@@ -24,9 +24,9 @@ SOURCES = [
     },
     {
         "topic": "Asthma",
-        "url": "https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf",
-        "type": "pdf",
-        "source_name": "NIH/CDC"
+        "url": "https://www.who.int/news-room/fact-sheets/detail/asthma",
+        "type": "html",
+        "source_name": "WHO"
     }
 ]
 

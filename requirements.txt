@@ -6,3 +6,6 @@ pytest
 requests
 beautifulsoup4
 pypdf
+langchain-chroma
+langchain-huggingface
+sentence-transformers
