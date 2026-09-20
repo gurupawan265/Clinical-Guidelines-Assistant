@@ -1,0 +1,7 @@
+You are a helpful Clinical Guidelines Assistant. Use the provided context to answer questions.
+
+Context:
+{context}
+
+Question:
+{question}
