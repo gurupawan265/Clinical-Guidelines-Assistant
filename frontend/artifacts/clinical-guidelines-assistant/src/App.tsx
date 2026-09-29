@@ -135,7 +135,11 @@ function SourcesCard({ sources, messageId }: { sources: ChatSource[]; messageId:
                   <span>{source.title}</span>
                   <ArrowUpRight size={14} className="mt-1 shrink-0 opacity-60 transition-transform group-hover:-translate-y-0.5 group-hover:translate-x-0.5" />
                 </span>
-                <span className="mt-1 block break-all text-xs leading-5 text-stone-500 underline decoration-stone-300 underline-offset-2 group-hover:decoration-teal-700/60 dark:text-stone-400 dark:decoration-[#48615c] dark:group-hover:decoration-[#9bddd6]/60">{source.url}</span>
+                {source.title !== source.url && (
+                  <span className="mt-1 block break-all text-xs leading-5 text-stone-500 underline decoration-stone-300 underline-offset-2 group-hover:decoration-teal-700/60 dark:text-stone-400 dark:decoration-[#48615c] dark:group-hover:decoration-[#9bddd6]/60">
+                    {source.url}
+                  </span>
+                )}
               </a>
             </li>
           ))}
