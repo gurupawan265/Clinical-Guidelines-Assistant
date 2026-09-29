@@ -12,19 +12,43 @@ from langchain_core.documents import Document
 SOURCES = [
     {
         "topic": "Diabetes",
+        "title": "Diabetes",
         "url": "https://www.who.int/news-room/fact-sheets/detail/diabetes",
         "type": "html",
         "source_name": "WHO"
     },
     {
         "topic": "Hypertension",
+        "title": "Hypertension",
         "url": "https://www.who.int/news-room/fact-sheets/detail/hypertension",
         "type": "html",
         "source_name": "WHO"
     },
     {
         "topic": "Asthma",
+        "title": "Asthma",
         "url": "https://www.who.int/news-room/fact-sheets/detail/asthma",
+        "type": "html",
+        "source_name": "WHO"
+    },
+    {
+        "topic": "COPD",
+        "title": "COPD",
+        "url": "https://www.who.int/news-room/fact-sheets/detail/chronic-obstructive-pulmonary-disease-(copd)",
+        "type": "html",
+        "source_name": "WHO"
+    },
+    {
+        "topic": "Tuberculosis",
+        "title": "Tuberculosis",
+        "url": "https://www.who.int/news-room/fact-sheets/detail/tuberculosis",
+        "type": "html",
+        "source_name": "WHO"
+    },
+    {
+        "topic": "Dengue",
+        "title": "Dengue and severe dengue",
+        "url": "https://www.who.int/news-room/fact-sheets/detail/dengue-and-severe-dengue",
         "type": "html",
         "source_name": "WHO"
     }
@@ -72,6 +96,7 @@ def ingest_documents() -> List[Document]:
             # Tag metadata
             for doc in docs:
                 doc.metadata["topic"] = source["topic"]
+                doc.metadata["title"] = source["title"]
                 doc.metadata["url"] = source["url"]
                 doc.metadata["source_name"] = source["source_name"]
                 doc.metadata["content_type"] = source["type"]

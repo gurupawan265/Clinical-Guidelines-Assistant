@@ -48,12 +48,23 @@ def build_vector_store() -> Chroma:
     
     chunk_ids = [generate_chunk_id(doc, i) for i, doc in enumerate(chunked_docs)]
     
-    # Initialize and populate the DB using deterministic IDs (upsert)
+    # Initialize DB (it loads the existing one if present)
     vectorstore = Chroma(
         collection_name="clinical_guidelines",
         embedding_function=embeddings,
         persist_directory=CHROMA_DB_DIR
     )
+    
+    # Delete the collection to clear out old/stale chunks
+    vectorstore.delete_collection()
+    
+    # Reinitialize a fresh collection
+    vectorstore = Chroma(
+        collection_name="clinical_guidelines",
+        embedding_function=embeddings,
+        persist_directory=CHROMA_DB_DIR
+    )
+    
     vectorstore.add_documents(documents=chunked_docs, ids=chunk_ids)
     print("Chunks successfully embedded and stored in Chroma with deterministic IDs.")
     
