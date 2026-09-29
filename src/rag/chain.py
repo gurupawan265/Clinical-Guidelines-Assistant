@@ -8,44 +8,30 @@ from langchain_core.output_parsers import StrOutputParser
 from src.rag.vector_store import get_retriever, get_embeddings_model, CHROMA_DB_DIR
 from langchain_chroma import Chroma
 
+from langchain_groq import ChatGroq
 import os
 from dotenv import load_dotenv
-from langchain_openai import ChatOpenAI
 
 load_dotenv()
 
-import openai
-
-_llm = None
-
-def get_llm():
-    global _llm
-    if _llm is None:
-        print("[LLM] Initializing OpenRouter (qwen/qwen3.8-27b:free)...")
-        _llm = ChatOpenAI(
-            model_name="qwen/qwen3.8-27b:free",
-            openai_api_base="https://openrouter.ai/api/v1",
-            openai_api_key=os.environ.get("OPENROUTER_API_KEY"),
-            temperature=0.1
-        )
-    return _llm
-
-class LazyLLM(Runnable):
-    def invoke(self, input, config=None, **kwargs):
-        try:
-            return get_llm().invoke(input, config=config, **kwargs).content
-        except (openai.InternalServerError, openai.APIConnectionError, openai.RateLimitError) as e:
-            raise RuntimeError("The selected model is temporarily unavailable. Please try again later.")
-        
-    def bind(self, **kwargs):
-        return get_llm().bind(**kwargs)
-
-llm = LazyLLM()
+llm = ChatGroq(
+    model="openai/gpt-oss-20b",
+    temperature=0.1,
+    max_tokens=512,
+)
 
 # 2. Define the strict prompt template with instructions for citations
 PROMPT_TEMPLATE = """<|im_start|>system
-You are a clinical assistant. 
-Use ONLY the provided context. If the answer is not present in the context, say 'I don't know'. Do not hallucinate.<|im_end|>
+You are a clinical guidelines assistant. 
+Your primary task is to answer the user's question based strictly on the provided Context.
+
+RULES:
+1. Use ONLY the provided Context. Do not rely on your general knowledge.
+2. If the Context does not contain enough information to fully answer the question, say "I don't know".
+3. Never fabricate or hallucinate medical facts, treatments, or statistics.
+4. Be concise and direct. Do not get cut off.
+5. If the Context is completely irrelevant, you MUST output exactly "I don't know." and nothing else.
+<|im_end|>
 <|im_start|>user
 Context:
 {context}
@@ -77,7 +63,7 @@ def retrieve_and_gate(query: str) -> dict:
     
     print(f"\n[Gate] Scores for '{query}':")
     for doc, score in docs_and_scores:
-        print(f"  -> Score: {score:.4f} | {doc.page_content[:40].replace('\n', ' ')}...")
+        print(f"  -> Score: {score:.4f} | {doc.page_content[:40].replace(chr(10), ' ')}...")
         
     best_score = docs_and_scores[0][1] if docs_and_scores else float('inf')
     if best_score > RELEVANCE_THRESHOLD:
@@ -103,7 +89,7 @@ def extract_sources_list(docs) -> list:
         return []
     sources_dict = {}
     for doc in docs:
-        title = doc.metadata.get("source", "Unknown Source")
+        title = doc.metadata.get("title", doc.metadata.get("topic", "Unknown Source"))
         url = doc.metadata.get("url", "")
         # Use URL as key to deduplicate
         key = url if url else title
@@ -128,17 +114,23 @@ def conditional_generate(inputs: dict) -> dict:
         }
     
     prompt_val = prompt.invoke({"context": retrieval["context"], "question": query})
-    raw_response = llm.invoke(prompt_val)
+    raw_response = llm.invoke(prompt_val).content
     
-    safe_response = output_guardrail(raw_response)
+    safe_response = output_guardrail(raw_response).strip()
     
     if "blocked because it contains specific medication dosages" in safe_response:
         return {
             "response": safe_response,
             "sources": []
         }
+        
+    if not safe_response or "i don't know" in safe_response.lower():
+        return {
+            "response": "I don't have enough relevant information in my clinical guideline sources to answer that reliably. Please consult a qualified healthcare professional for guidance specific to your situation.",
+            "sources": []
+        }
     
-    final_response = safe_response.strip() + DISCLAIMER
+    final_response = safe_response + DISCLAIMER
     return {
         "response": final_response,
         "sources": extract_sources_list(retrieval["docs"])
