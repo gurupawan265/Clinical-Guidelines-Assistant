@@ -1,0 +1,28 @@
+kind = "web"
+previewPath = "/"
+title = "Clinical Guidelines Assistant"
+description = "A calm, trustworthy chat interface for a RAG-powered healthcare Q&A assistant that presents answers, sources, and safety guidance without backend logic in the frontend artifact."
+version = "1.0.0"
+id = "artifacts/clinical-guidelines-assistant"
+router = "path"
+
+[[services]]
+name = "web"
+paths = [ "/" ]
+localPort = 19584
+
+[services.development]
+run = "pnpm --filter @workspace/clinical-guidelines-assistant run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/clinical-guidelines-assistant", "run", "build" ]
+serve = "static"
+publicDir = "artifacts/clinical-guidelines-assistant/dist/public"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "19584"
+BASE_PATH = "/"

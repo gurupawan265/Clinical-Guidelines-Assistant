@@ -16,9 +16,19 @@ def get_embeddings_model():
     # Using all-MiniLM-L6-v2 as requested for fast, local, CPU-friendly embeddings
     return HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
 
+import hashlib
+
+def generate_chunk_id(doc: Document, idx: int) -> str:
+    url = doc.metadata.get("url", "")
+    topic = doc.metadata.get("topic", "")
+    start_index = doc.metadata.get("start_index", idx)
+    content = doc.page_content
+    raw_key = f"{topic}::{url}::{start_index}::{content}"
+    return hashlib.md5(raw_key.encode("utf-8")).hexdigest()
+
 def build_vector_store() -> Chroma:
     """
-    Ingests documents, chunks them, and stores them in a local Chroma vector database.
+    Ingests documents, chunks them, and stores them in a local Chroma vector database using deterministic chunk IDs.
     """
     print("Fetching and ingesting raw documents...")
     raw_docs = ingest_documents()
@@ -36,19 +46,25 @@ def build_vector_store() -> Chroma:
     print("Initializing embedding model and Chroma DB...")
     embeddings = get_embeddings_model()
     
-    # Initialize and populate the DB
-    vectorstore = Chroma.from_documents(
-        documents=chunked_docs,
-        embedding=embeddings,
-        persist_directory=CHROMA_DB_DIR,
-        collection_name="clinical_guidelines"
+    chunk_ids = [generate_chunk_id(doc, i) for i, doc in enumerate(chunked_docs)]
+    
+    # Initialize and populate the DB using deterministic IDs (upsert)
+    vectorstore = Chroma(
+        collection_name="clinical_guidelines",
+        embedding_function=embeddings,
+        persist_directory=CHROMA_DB_DIR
     )
-    print("Chunks successfully embedded and stored in Chroma.")
+    vectorstore.add_documents(documents=chunked_docs, ids=chunk_ids)
+    print("Chunks successfully embedded and stored in Chroma with deterministic IDs.")
     
     return vectorstore
 
 def get_retriever():
     """Returns a retriever interface for the vector store."""
+    if not os.path.exists(CHROMA_DB_DIR) or not os.listdir(CHROMA_DB_DIR):
+        raise FileNotFoundError(
+            "Chroma database not found. Run:\npython src/rag/vector_store.py"
+        )
     embeddings = get_embeddings_model()
     vectorstore = Chroma(
         collection_name="clinical_guidelines",

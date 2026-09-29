@@ -324,5 +324,102 @@ def run_evaluation():
         source_str = r["source_correct"] if isinstance(r["source_correct"], str) else ("✅" if r["source_correct"] else "❌")
         print(f"| {r['id']} | {r['question']} | {r['exp_route']} | {route_str} | {source_str} | {r['faithful']} | {r['result']} |", flush=True)
 
+MULTI_TURN_EVAL_THREADS = [
+    {
+        "thread_id": 1,
+        "name": "Asthma Guideline & Follow-ups",
+        "turns": [
+            {
+                "turn": 1,
+                "question": "What are common symptoms of asthma?",
+                "expected_route": "general-info",
+                "expected_topic": "Asthma"
+            },
+            {
+                "turn": 2,
+                "question": "What about children?",
+                "expected_route": "general-info",
+                "expected_topic": "Asthma"
+            },
+            {
+                "turn": 3,
+                "question": "What are the common triggers?",
+                "expected_route": "general-info",
+                "expected_topic": "Asthma"
+            }
+        ]
+    },
+    {
+        "thread_id": 2,
+        "name": "Diabetes Info to Emergency Transition",
+        "turns": [
+            {
+                "turn": 1,
+                "question": "What is type 2 diabetes?",
+                "expected_route": "general-info",
+                "expected_topic": "Diabetes"
+            },
+            {
+                "turn": 2,
+                "question": "I am having severe difficulty breathing right now.",
+                "expected_route": "emergency",
+                "expected_topic": "N/A"
+            }
+        ]
+    }
+]
+
+def run_multi_turn_evaluation():
+    print("\n" + "=" * 80, flush=True)
+    print("PHASE 8 EXTENSION: MULTI-TURN EVALUATION SUITE", flush=True)
+    print("=" * 80, flush=True)
+
+    total_turns = 0
+    passed_turns = 0
+
+    for thread in MULTI_TURN_EVAL_THREADS:
+        t_id = thread["thread_id"]
+        t_name = thread["name"]
+        print(f"\n--- Dialog Thread {t_id}: {t_name} ---", flush=True)
+        
+        state = {"chat_history": []}
+        
+        for turn_info in thread["turns"]:
+            total_turns += 1
+            t_num = turn_info["turn"]
+            q = turn_info["question"]
+            exp_route = turn_info["expected_route"]
+
+            history_before = list(state.get("chat_history", []))
+            state["query"] = q
+            
+            # Execute graph turn
+            state = app.invoke(state)
+            
+            act_route = state.get("route", "")
+            reformulated = state.get("reformulated_query", "N/A")
+            response = state.get("response", "")
+            
+            route_correct = (act_route == exp_route)
+            passed = route_correct
+            if passed:
+                passed_turns += 1
+
+            status_icon = "PASS" if passed else "FAIL"
+
+            print(f"\n[Thread {t_id} | Turn {t_num}] Query: '{q}'", flush=True)
+            print(f"  Supplied History Count: {len(history_before)} messages", flush=True)
+            print(f"  Expected Route: {exp_route:<12} | Actual Route: {act_route:<12} [{'✅' if route_correct else '❌'}]", flush=True)
+            if act_route == "general-info":
+                print(f"  Reformulated Query: {reformulated}", flush=True)
+            print(f"  Response Preview: {response[:150].replace('\n', ' ')}...", flush=True)
+            print(f"  Turn Result: {status_icon}", flush=True)
+
+    print("\n" + "=" * 80, flush=True)
+    print(f"MULTI-TURN EVALUATION SUMMARY: {passed_turns} / {total_turns} Turns Passed ({passed_turns/total_turns*100:.1f}%)", flush=True)
+    print("=" * 80, flush=True)
+
 if __name__ == "__main__":
     run_evaluation()
+    run_multi_turn_evaluation()
+

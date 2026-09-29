@@ -3,27 +3,44 @@ Basic retrieval-augmented generation (RAG) chain.
 """
 import re
 from langchain_core.prompts import PromptTemplate
-from langchain_core.runnables import RunnablePassthrough, RunnableLambda
+from langchain_core.runnables import Runnable, RunnablePassthrough, RunnableLambda
 from langchain_core.output_parsers import StrOutputParser
-from langchain_huggingface import HuggingFacePipeline
-from transformers import AutoModelForCausalLM, AutoTokenizer, pipeline
 from src.rag.vector_store import get_retriever, get_embeddings_model, CHROMA_DB_DIR
 from langchain_chroma import Chroma
 
-# 1. Define the LLM (Using Hugging Face local pipeline)
-model_id = "Qwen/Qwen2.5-1.5B-Instruct"
-tokenizer = AutoTokenizer.from_pretrained(model_id)
-model = AutoModelForCausalLM.from_pretrained(model_id)
+import os
+from dotenv import load_dotenv
+from langchain_openai import ChatOpenAI
 
-pipe = pipeline(
-    "text-generation",
-    model=model,
-    tokenizer=tokenizer,
-    max_new_tokens=256,
-    temperature=0.1, # Low temperature for strict factual answers
-    return_full_text=False
-)
-llm = HuggingFacePipeline(pipeline=pipe)
+load_dotenv()
+
+import openai
+
+_llm = None
+
+def get_llm():
+    global _llm
+    if _llm is None:
+        print("[LLM] Initializing OpenRouter (qwen/qwen3.8-27b:free)...")
+        _llm = ChatOpenAI(
+            model_name="qwen/qwen3.8-27b:free",
+            openai_api_base="https://openrouter.ai/api/v1",
+            openai_api_key=os.environ.get("OPENROUTER_API_KEY"),
+            temperature=0.1
+        )
+    return _llm
+
+class LazyLLM(Runnable):
+    def invoke(self, input, config=None, **kwargs):
+        try:
+            return get_llm().invoke(input, config=config, **kwargs).content
+        except (openai.InternalServerError, openai.APIConnectionError, openai.RateLimitError) as e:
+            raise RuntimeError("The selected model is temporarily unavailable. Please try again later.")
+        
+    def bind(self, **kwargs):
+        return get_llm().bind(**kwargs)
+
+llm = LazyLLM()
 
 # 2. Define the strict prompt template with instructions for citations
 PROMPT_TEMPLATE = """<|im_start|>system
@@ -81,29 +98,34 @@ def output_guardrail(text: str) -> str:
         return "This response has been blocked because it contains specific medication dosages or personalized treatment recommendations, which this assistant is not authorized to provide."
     return text
 
-def format_sources(docs) -> str:
+def extract_sources_list(docs) -> list:
     if not docs: 
-        return ""
-    sources = []
+        return []
+    sources_dict = {}
     for doc in docs:
-        source_name = doc.metadata.get("source", "Unknown Source")
+        title = doc.metadata.get("source", "Unknown Source")
         url = doc.metadata.get("url", "")
-        sources.append(f"* {source_name} — {url}")
+        # Use URL as key to deduplicate
+        key = url if url else title
+        if key not in sources_dict:
+            sources_dict[key] = {"title": title, "url": url}
     
-    # Deduplicate
-    unique_sources = list(dict.fromkeys(sources))
-    return "\n\n**Sources**\n" + "\n".join(unique_sources)
+    return list(sources_dict.values())
 
-def conditional_generate(inputs: dict) -> str:
+def conditional_generate(inputs: dict) -> dict:
     """
     Checks if the gate rejected the query. If so, returns fallback.
     Otherwise, formats the prompt, calls the LLM, checks output guardrails, and adds disclaimer + sources.
+    Returns a dictionary with 'response' and 'sources' list.
     """
     query = inputs["question"]
     retrieval = retrieve_and_gate(query)
     
     if retrieval["context"] == "GATE_REJECTED":
-        return "I don't have enough relevant information in my clinical guideline sources to answer that reliably. Please consult a qualified healthcare professional for guidance specific to your situation."
+        return {
+            "response": "I don't have enough relevant information in my clinical guideline sources to answer that reliably. Please consult a qualified healthcare professional for guidance specific to your situation.",
+            "sources": []
+        }
     
     prompt_val = prompt.invoke({"context": retrieval["context"], "question": query})
     raw_response = llm.invoke(prompt_val)
@@ -111,10 +133,16 @@ def conditional_generate(inputs: dict) -> str:
     safe_response = output_guardrail(raw_response)
     
     if "blocked because it contains specific medication dosages" in safe_response:
-        return safe_response
+        return {
+            "response": safe_response,
+            "sources": []
+        }
     
-    final_response = safe_response.strip() + DISCLAIMER + format_sources(retrieval["docs"])
-    return final_response
+    final_response = safe_response.strip() + DISCLAIMER
+    return {
+        "response": final_response,
+        "sources": extract_sources_list(retrieval["docs"])
+    }
 
 def get_rag_chain():
     """

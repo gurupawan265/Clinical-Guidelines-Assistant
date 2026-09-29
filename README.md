@@ -171,7 +171,9 @@ Clinical Guidelines Assistant/
 
 ---
 
-## 15. Setup & Installation
+## 15. Clean Clone & Setup Sequence
+
+To run this project from a clean repository clone, follow this explicit sequence:
 
 1. **Clone the repository**:
    ```bash
@@ -179,7 +181,7 @@ Clinical Guidelines Assistant/
    cd "Clinical Guidelines Assistant"
    ```
 
-2. **Set up virtual environment**:
+2. **Create virtual environment**:
    ```bash
    python -m venv venv
    # Windows PowerShell:
@@ -191,22 +193,21 @@ Clinical Guidelines Assistant/
    pip install -r requirements.txt
    ```
 
----
-
-## 16. Running the Project
-
-1. **Build Vector Store Index**:
+4. **Build Chroma Database (Explicit Ingestion Step)**:
    ```bash
    python src/rag/vector_store.py
    ```
+   *Note: `get_retriever()` will explicitly fail with an actionable error message if `chroma_db` is missing.*
 
-2. **Run Evaluation Suite**:
+5. **Run Tests**:
    ```bash
-   python eval_suite.py
+   python test_queries.py
+   python test_guardrails.py
    ```
 
-3. **Run Multi-turn Memory Tests**:
+6. **Run Evaluation Harness**:
    ```bash
+   python eval_suite.py
    python test_multi_turn.py
    ```
 

@@ -11,6 +11,7 @@ class AgentState(TypedDict):
     route: str
     reformulated_query: str
     response: str
+    sources: List[Dict[str, str]]
 
 def format_history(history: List[Dict[str, str]]) -> str:
     if not history:
@@ -79,12 +80,12 @@ def handle_emergency(state: AgentState):
     response = ("\u26a0\ufe0f This may be a medical emergency. Please stop using this assistant "
                 "and contact your local emergency medical service or go to the nearest "
                 "emergency department immediately. This assistant cannot assess or manage medical emergencies.")
-    return {"response": response}
+    return {"response": response, "sources": []}
 
 def handle_out_of_scope(state: AgentState):
     response = ("I cannot provide personalized medical advice, dosing, or diagnoses. "
                 "I can only provide general clinical guidelines. Please consult a qualified healthcare provider.")
-    return {"response": response}
+    return {"response": response, "sources": []}
 
 REFORMULATE_TEMPLATE = """<|im_start|>system
 You are a medical query reformulator. Given a conversation history and a new user query, rewrite the new user query to be a standalone query that can be used by a search engine to retrieve clinical guidelines.
@@ -146,8 +147,8 @@ def reformulate_query(state: AgentState):
 def handle_general_info(state: AgentState):
     chain = get_rag_chain()
     req_query = state.get("reformulated_query", state["query"])
-    response = chain.invoke(req_query)
-    return {"response": response}
+    result = chain.invoke(req_query)
+    return {"response": result["response"], "sources": result["sources"]}
 
 def update_history(state: AgentState):
     history = state.get("chat_history", [])
