@@ -11,10 +11,31 @@ from src.rag.document_loader import ingest_documents
 
 CHROMA_DB_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "chroma_db")
 
+_embeddings_model = None
+_vectorstore = None
+
 def get_embeddings_model():
-    """Returns the HuggingFace embeddings model."""
-    # Using all-MiniLM-L6-v2 as requested for fast, local, CPU-friendly embeddings
-    return HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
+    """Returns the cached HuggingFace embeddings model."""
+    global _embeddings_model
+    if _embeddings_model is None:
+        _embeddings_model = HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
+    return _embeddings_model
+
+def get_vector_store() -> Chroma:
+    """Returns the cached Chroma vector store instance."""
+    global _vectorstore
+    if _vectorstore is None:
+        if not os.path.exists(CHROMA_DB_DIR) or not os.listdir(CHROMA_DB_DIR):
+            raise FileNotFoundError(
+                "Chroma database not found. Run:\npython src/rag/vector_store.py"
+            )
+        embeddings = get_embeddings_model()
+        _vectorstore = Chroma(
+            collection_name="clinical_guidelines",
+            embedding_function=embeddings,
+            persist_directory=CHROMA_DB_DIR
+        )
+    return _vectorstore
 
 import hashlib
 

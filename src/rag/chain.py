@@ -5,7 +5,7 @@ import re
 from langchain_core.prompts import PromptTemplate
 from langchain_core.runnables import Runnable, RunnablePassthrough, RunnableLambda
 from langchain_core.output_parsers import StrOutputParser
-from src.rag.vector_store import get_retriever, get_embeddings_model, CHROMA_DB_DIR
+from src.rag.vector_store import get_retriever, get_embeddings_model, get_vector_store, CHROMA_DB_DIR
 from langchain_chroma import Chroma
 
 from langchain_groq import ChatGroq
@@ -44,12 +44,6 @@ Question:
 prompt = PromptTemplate.from_template(PROMPT_TEMPLATE)
 
 # 3. Retrieval Gate Component
-vectorstore = Chroma(
-    collection_name="clinical_guidelines",
-    embedding_function=get_embeddings_model(),
-    persist_directory=CHROMA_DB_DIR
-)
-
 RELEVANCE_THRESHOLD = 1.2  # L2 distance: lower is better.
 DISCLAIMER = "\n\n**Medical information disclaimer:** This response is for general informational purposes only and is not a substitute for professional medical advice, diagnosis, or treatment."
 
@@ -59,6 +53,7 @@ def retrieve_and_gate(query: str) -> dict:
     If the best score > RELEVANCE_THRESHOLD, returns a rejection flag.
     Otherwise, formats and returns the context.
     """
+    vectorstore = get_vector_store()
     docs_and_scores = vectorstore.similarity_search_with_score(query, k=4)
     
     print(f"\n[Gate] Scores for '{query}':")
