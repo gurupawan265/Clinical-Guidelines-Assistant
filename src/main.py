@@ -15,9 +15,16 @@ from src.agent.graph import app as workflow_app
 app = FastAPI(title="Clinical Guidelines Assistant API")
 
 # Configure CORS
+# Allow setting CORS_ORIGINS from environment (e.g. "https://my-frontend.vercel.app,http://localhost:5173")
+cors_origins_env = os.environ.get("CORS_ORIGINS")
+if cors_origins_env:
+    allow_origins = [origin.strip() for origin in cors_origins_env.split(",")]
+else:
+    allow_origins = ["http://localhost:5173", "http://localhost:5174", "http://0.0.0.0:5173"]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://localhost:5174", "http://0.0.0.0:5173"],
+    allow_origins=allow_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

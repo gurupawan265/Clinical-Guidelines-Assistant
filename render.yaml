@@ -1,0 +1,13 @@
+services:
+  - type: web
+    name: clinical-guidelines-api
+    env: python
+    buildCommand: "pip install -r requirements.txt && python src/rag/vector_store.py"
+    startCommand: "uvicorn src.main:app --host 0.0.0.0 --port $PORT"
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.10.0
+      - key: GROQ_API_KEY
+        sync: false
+      - key: CORS_ORIGINS
+        sync: false
