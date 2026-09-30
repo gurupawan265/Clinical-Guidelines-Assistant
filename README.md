@@ -1,12 +1,12 @@
 # Clinical Guidelines Assistant (RAG)
 
-An agentic Retrieval-Augmented Generation (RAG) system built with **LangChain**, **LangGraph**, **Chroma DB**, and a local **Qwen2.5-1.5B-Instruct** model to answer clinical guideline questions accurately while strictly enforcing multi-stage safety guardrails.
+An agentic Retrieval-Augmented Generation (RAG) system built with **LangChain**, **LangGraph**, **Chroma DB**, and the **Groq API** (`openai/gpt-oss-20b`) to answer clinical guideline questions accurately while strictly enforcing multi-stage safety guardrails.
 
 ---
 
 ## 1. Overview
 
-The **Clinical Guidelines Assistant** is a privacy-focused, locally executable clinical RAG application. It grounds AI responses in validated medical guideline documentation from the World Health Organization (WHO), implementing explicit intent routing, conversational context memory, relevance gating, and output guardrails to prevent harmful medical advice or hallucinations.
+The **Clinical Guidelines Assistant** is a strict, evidence-grounded clinical RAG application. It roots AI responses in validated medical guideline documentation from the World Health Organization (WHO), implementing explicit intent routing, conversational context memory, relevance gating, and output guardrails to prevent harmful medical advice or hallucinations.
 
 ---
 
@@ -25,7 +25,7 @@ The **Clinical Guidelines Assistant** addresses these issues through strict evid
 
 * **Factual Grounding**: Ensure all general clinical answers draw strictly from authoritative WHO source materials.
 * **Multi-Layer Safety**: Intercept emergency and out-of-scope medical queries before reaching the generation phase.
-* **Local & Open Execution**: Operate entirely on local hardware using Hugging Face pipelines and open embeddings (`all-MiniLM-L6-v2`), requiring zero third-party API dependencies.
+* **High-Speed Inference**: Powered by the Groq API for ultra-fast and high-quality generation, coupled with local embeddings (`all-MiniLM-L6-v2`) for retrieval.
 * **Stateful Conversation**: Maintain conversational context across follow-up queries without exploding token context windows.
 
 ---
@@ -61,7 +61,7 @@ flowchart TD
     H --> I[L2 Relevance Gate]
     I -->|Irrelevant| J[Insufficient Information Fallback]
     I -->|Relevant| K[Retrieved WHO Context]
-    K --> L[Qwen2.5-1.5B-Instruct]
+    K --> L[Groq GPT-OSS-20B]
     L --> M[Output Guardrails]
     M -->|Unsafe dosage / personalized treatment| N[Safe Blocked Response]
     M -->|Safe| O[Answer + Disclaimer + Sources]
@@ -79,7 +79,7 @@ flowchart TD
    - `general-info`: Passes query and history to reformulator.
 3. **Reformulation Step**: Converts ambiguous queries into standalone search queries.
 4. **Retrieval & Gating**: Searches Chroma DB. If minimum L2 distance > `1.2`, returns gate fallback.
-5. **Generation & Guardrails**: Qwen2.5-1.5B generates response from context. Output regex guardrail scans for dosages/treatment advice.
+5. **Generation & Guardrails**: Groq's API (`gpt-oss-20b`) generates response from context. Output regex guardrail scans for dosages/treatment advice.
 6. **Final Formatting & State Update**: Formatted response with disclaimer and sources is returned, and conversation state updates.
 
 ---
@@ -143,9 +143,10 @@ If matched, the answer is replaced with a safe fallback:
 * **Framework**: Python 3.10+
 * **Agentic Graph**: LangGraph (`StateGraph`)
 * **Orchestration**: LangChain Core / Community
-* **Embeddings**: `sentence-transformers/all-MiniLM-L6-v2`
+* **Embeddings**: `sentence-transformers/all-MiniLM-L6-v2` (Local)
 * **Vector Store**: Chroma DB (`langchain-chroma`)
-* **Local LLM**: `Qwen/Qwen2.5-1.5B-Instruct` via Hugging Face `transformers` pipeline
+* **LLM Generation**: `ChatGroq` (`openai/gpt-oss-20b`) via Groq API
+* **Frontend**: A `pnpm` workspace is scaffolded in `frontend/` but is not yet fully integrated with the backend API.
 
 ---
 
@@ -153,16 +154,18 @@ If matched, the answer is replaced with a safe fallback:
 
 ```text
 Clinical Guidelines Assistant/
+├── .env                       # Environment variables (API keys)
 ├── data/                      # Local document storage
 ├── chroma_db/                  # Persisted Chroma vector store
+├── frontend/                  # Scaffolded web frontend (WIP, not yet integrated)
 ├── src/
 │   ├── agent/
 │   │   └── graph.py           # LangGraph state, nodes, router & edges
 │   └── rag/
 │       ├── document_loader.py # Ingestion script for WHO sources
 │       ├── vector_store.py    # Chroma indexing & retriever setup
-│       └── chain.py           # RAG chain, relevance gate & guardrails
-├── eval_suite.py              # 20-question evaluation harness
+│       └── chain.py           # RAG chain, relevance gate & Groq LLM setup
+├── eval_suite.py              # Multi-turn & benchmark evaluation harness
 ├── test_multi_turn.py         # Multi-turn conversation tests
 ├── test_guardrails.py         # Guardrail unit & defense-in-depth tests
 ├── requirements.txt           # Dependencies
@@ -193,19 +196,25 @@ To run this project from a clean repository clone, follow this explicit sequence
    pip install -r requirements.txt
    ```
 
-4. **Build Chroma Database (Explicit Ingestion Step)**:
+4. **Environment Variables**:
+   Create a `.env` file in the root directory and add your Groq API key:
+   ```env
+   GROQ_API_KEY=your_actual_groq_api_key_here
+   ```
+
+5. **Build Chroma Database (Explicit Ingestion Step)**:
    ```bash
    python src/rag/vector_store.py
    ```
    *Note: `get_retriever()` will explicitly fail with an actionable error message if `chroma_db` is missing.*
 
-5. **Run Tests**:
+6. **Run Tests**:
    ```bash
    python test_queries.py
    python test_guardrails.py
    ```
 
-6. **Run Evaluation Harness**:
+7. **Run Evaluation Harness**:
    ```bash
    python eval_suite.py
    python test_multi_turn.py
@@ -231,7 +240,7 @@ To run this project from a clean repository clone, follow this explicit sequence
 
 ## 18. Evaluation Results
 
-Evaluated via `eval_suite.py` across 20 benchmark queries:
+Evaluated via `eval_suite.py` across 20 benchmark queries and a multi-turn evaluation suite utilizing the current `ChatGroq` pipeline:
 
 | Metric | Result | Target / Standard |
 |---|---|---|
@@ -242,6 +251,12 @@ Evaluated via `eval_suite.py` across 20 benchmark queries:
 | **Basic Faithfulness Rate** | **100% (15/15)** | 100% |
 | **Emergency Routing** | **1/1 (100%)** | 100% |
 | **Out-of-Scope Routing** | **4/4 (100%)** | 100% |
+| **Multi-Turn Evaluation** | **100% (5/5 turns)** | 100% |
+
+**Performance Metrics (Groq API):**
+* **Total Evaluation Time**: ~271.79 seconds
+* **Total Groq API Calls**: 48
+* **Average API Response Latency**: 5.64 seconds
 
 ### Markdown Results Table
 
@@ -272,17 +287,10 @@ Evaluated via `eval_suite.py` across 20 benchmark queries:
 
 ## 19. Engineering Tradeoffs
 
-* **Vector-only retrieval vs hybrid retrieval**:
-  I initially considered hybrid retrieval using vector search + BM25. I implemented and evaluated it on my 45-chunk WHO corpus. It did not improve the ranking of the tested queries and actually made one query worse. Because of that, I decided to keep vector-only retrieval instead of adding unnecessary complexity.
-
-* **Local Qwen2.5-1.5B vs a larger model**:
-  I chose a small local Hugging Face model so the system could run locally without relying on a paid API. The tradeoff was that the smaller model had weaker instruction-following, especially during query routing and reformulation, so I had to add few-shot prompts and explicit guardrails.
-
-* **Bounded memory vs full conversation history**:
-  I chose a last-4-turn memory window instead of keeping the entire conversation. This keeps the context manageable while still supporting common follow-up questions such as *"What about children?"*.
-
-* **Rule-based guardrails vs relying only on the LLM**:
-  I added explicit routing, relevance thresholds, and output checks instead of trusting the LLM prompt alone. This adds some implementation complexity, but it gives the system multiple safety layers.
+* **Migration to Groq API vs Local Execution**: The project was initially built using a local Qwen2.5-1.5B model to avoid third-party API dependencies. However, it was migrated to ChatGroq (`openai/gpt-oss-20b`) to significantly improve instruction-following (especially in query routing and reformulation) and to drastically reduce inference latency.
+* **Vector-only retrieval vs hybrid retrieval**: Hybrid retrieval (Vector + BM25) was evaluated on the 45-chunk WHO corpus but did not improve ranking for the benchmark queries. Vector-only retrieval was maintained to avoid unnecessary complexity.
+* **Bounded memory vs full conversation history**: A last-4-turn memory window keeps the context manageable while supporting common conversational follow-ups (e.g. *"What about children?"*).
+* **Rule-based guardrails vs LLM reliance**: Explicit routing, relevance thresholds, and regex checks were added to build a defense-in-depth safety architecture, avoiding complete reliance on the LLM prompt.
 
 ---
 
@@ -290,16 +298,17 @@ Evaluated via `eval_suite.py` across 20 benchmark queries:
 
 * **Corpus Coverage**: Contains only three WHO fact sheet documents. Cannot answer questions outside Diabetes, Asthma, and Hypertension.
 * **Deterministic Guardrails**: Regex output guardrails might occasionally produce false positives on non-prescriptive dosage mentions in academic quotes.
-* **CPU Inference Latency**: Local execution of Qwen2.5-1.5B on CPU requires several seconds per response turn.
+* **Self-Verification Bias in Evaluation**: The current faithfulness evaluation suite uses the same active LLM (`openai/gpt-oss-20b`) to evaluate factual consistency as it used to generate the answer. This methodology risks a self-verification bias where the model may be overly charitable to its own outputs.
+* **Frontend Connectivity**: A frontend is scaffolded but not fully integrated with the backend graph pipeline yet.
 
 ---
 
 ## 21. Future Improvements
 
 * **Expand the clinical knowledge base**: Add more authoritative clinical guidelines (e.g. NICE, CDC) and diversify topic coverage.
-* **Improve query reformulation**: Fine-tune or utilize a dedicated lightweight rewriter to eliminate occasional hallucinatory rewrites.
-* **Build a larger evaluation set**: Create a benchmark dataset of 100+ multi-turn clinical queries with adversarial edge cases.
+* **Implement Cross-Encoder Evaluator**: Add an independent cross-encoder model to test faithfulness, avoiding self-verification bias.
 * **Strengthen safety detection**: Integrate semantic classification models for dosage and treatment recommendation detection.
+* **Connect the Frontend**: Complete the backend API and connect the existing React frontend for full UI interaction.
 * **Re-evaluate hybrid retrieval**: Re-test BM25 + Vector hybrid retrieval and cross-encoder reranking once corpus size exceeds 1,000+ chunks.
 
 ---

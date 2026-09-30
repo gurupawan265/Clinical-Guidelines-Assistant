@@ -13,22 +13,32 @@ sys.stdout.reconfigure(encoding='utf-8', write_through=True)
 
 from langchain_core.prompts import PromptTemplate
 from langchain_core.output_parsers import StrOutputParser
-from langchain_huggingface import HuggingFacePipeline
-from transformers import pipeline
 
 from src.agent.graph import app
-from src.rag.chain import retrieve_and_gate, model, tokenizer
+from src.rag.chain import retrieve_and_gate, llm
 
-# Dedicated fast pipeline for evaluation checks (max_new_tokens=10)
-eval_pipe = pipeline(
-    "text-generation",
-    model=model,
-    tokenizer=tokenizer,
-    max_new_tokens=10,
-    temperature=0.01,
-    return_full_text=False
-)
-eval_llm = HuggingFacePipeline(pipeline=eval_pipe)
+import time
+from langchain_groq import ChatGroq
+
+# Metrics tracking
+api_calls = 0
+total_api_latency = 0.0
+
+original_invoke = ChatGroq.invoke
+
+def invoke_with_metrics(self, *args, **kwargs):
+    global api_calls, total_api_latency
+    api_calls += 1
+    start_t = time.time()
+    res = original_invoke(self, *args, **kwargs)
+    total_api_latency += (time.time() - start_t)
+    return res
+
+ChatGroq.invoke = invoke_with_metrics
+
+eval_llm = llm
+
+
 
 EVAL_DATASET = [
     {
@@ -194,6 +204,7 @@ def run_evaluation():
     print("PHASE 8 EVALUATION SUITE", flush=True)
     print("=" * 80, flush=True)
 
+    start_eval_time = time.time()
     results = []
     failures = []
 
@@ -312,6 +323,17 @@ def run_evaluation():
             print(f"  Likely Failure Layer: {f['likely_failure_layer']}", flush=True)
             print(f"  Response Preview: {f['response']}", flush=True)
             print(f"  Context Preview: {f['context']}", flush=True)
+
+    end_eval_time = time.time()
+    total_time = end_eval_time - start_eval_time
+    avg_latency = total_api_latency / api_calls if api_calls > 0 else 0
+
+    print("\n" + "=" * 80, flush=True)
+    print("PERFORMANCE METRICS", flush=True)
+    print("=" * 80, flush=True)
+    print(f"Total Evaluation Time: {total_time:.2f} seconds", flush=True)
+    print(f"Total Groq API Calls: {api_calls}", flush=True)
+    print(f"Average API Response Latency: {avg_latency:.2f} seconds", flush=True)
 
     # Print Markdown Table for README.md
     print("\n" + "=" * 80, flush=True)
