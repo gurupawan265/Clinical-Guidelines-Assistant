@@ -16,7 +16,7 @@ CHROMA_DB_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__f
 
 _embeddings_model = None
 _vectorstore = None
-_init_lock = threading.Lock()
+_init_lock = threading.RLock()
 
 def get_embeddings_model():
     """Returns the cached HuggingFace embeddings model."""
@@ -24,7 +24,7 @@ def get_embeddings_model():
     if _embeddings_model is None:
         with _init_lock:
             if _embeddings_model is None:
-                print("[RAG] Initializing embedding model (all-MiniLM-L6-v2)...")
+                print("[RAG] Initializing embedding model...")
                 t0 = time.time()
                 _embeddings_model = HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
                 print(f"[RAG] Embedding model initialized in {time.time() - t0:.2f} seconds")
@@ -48,7 +48,7 @@ def get_vector_store() -> Chroma:
                     embedding_function=embeddings,
                     persist_directory=CHROMA_DB_DIR
                 )
-                print(f"[RAG] Chroma initialized in {time.time() - t0:.2f} seconds")
+                print(f"[RAG] Chroma database opened in {time.time() - t0:.2f} seconds")
     return _vectorstore
 
 import hashlib

@@ -47,22 +47,7 @@ class ChatResponse(BaseModel):
     route: str
     sources: List[Source]
 
-import threading
 import traceback
-from src.rag.vector_store import get_vector_store
-
-@app.on_event("startup")
-def warm_up_model():
-    def _warmup():
-        try:
-            print("[Startup] Asynchronously pre-warming embedding model and vector store in background...")
-            get_vector_store()
-            print("[Startup] Background pre-warming complete!")
-        except Exception as e:
-            print(f"[Startup Warning] Background pre-warming encountered an issue: {e}")
-            
-    thread = threading.Thread(target=_warmup, daemon=True)
-    thread.start()
 
 @app.get("/health")
 def health_check():
