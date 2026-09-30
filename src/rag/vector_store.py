@@ -9,32 +9,46 @@ from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_chroma import Chroma
 from src.rag.document_loader import ingest_documents
 
+import threading
+import time
+
 CHROMA_DB_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "chroma_db")
 
 _embeddings_model = None
 _vectorstore = None
+_init_lock = threading.Lock()
 
 def get_embeddings_model():
     """Returns the cached HuggingFace embeddings model."""
     global _embeddings_model
     if _embeddings_model is None:
-        _embeddings_model = HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
+        with _init_lock:
+            if _embeddings_model is None:
+                print("[RAG] Initializing embedding model (all-MiniLM-L6-v2)...")
+                t0 = time.time()
+                _embeddings_model = HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
+                print(f"[RAG] Embedding model initialized in {time.time() - t0:.2f} seconds")
     return _embeddings_model
 
 def get_vector_store() -> Chroma:
     """Returns the cached Chroma vector store instance."""
     global _vectorstore
     if _vectorstore is None:
-        if not os.path.exists(CHROMA_DB_DIR) or not os.listdir(CHROMA_DB_DIR):
-            raise FileNotFoundError(
-                "Chroma database not found. Run:\npython src/rag/vector_store.py"
-            )
-        embeddings = get_embeddings_model()
-        _vectorstore = Chroma(
-            collection_name="clinical_guidelines",
-            embedding_function=embeddings,
-            persist_directory=CHROMA_DB_DIR
-        )
+        with _init_lock:
+            if _vectorstore is None:
+                if not os.path.exists(CHROMA_DB_DIR) or not os.listdir(CHROMA_DB_DIR):
+                    raise FileNotFoundError(
+                        "Chroma database not found. Run:\npython src/rag/vector_store.py"
+                    )
+                print("[RAG] Opening Chroma database...")
+                t0 = time.time()
+                embeddings = get_embeddings_model()
+                _vectorstore = Chroma(
+                    collection_name="clinical_guidelines",
+                    embedding_function=embeddings,
+                    persist_directory=CHROMA_DB_DIR
+                )
+                print(f"[RAG] Chroma initialized in {time.time() - t0:.2f} seconds")
     return _vectorstore
 
 import hashlib

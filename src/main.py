@@ -47,6 +47,23 @@ class ChatResponse(BaseModel):
     route: str
     sources: List[Source]
 
+import threading
+import traceback
+from src.rag.vector_store import get_vector_store
+
+@app.on_event("startup")
+def warm_up_model():
+    def _warmup():
+        try:
+            print("[Startup] Asynchronously pre-warming embedding model and vector store in background...")
+            get_vector_store()
+            print("[Startup] Background pre-warming complete!")
+        except Exception as e:
+            print(f"[Startup Warning] Background pre-warming encountered an issue: {e}")
+            
+    thread = threading.Thread(target=_warmup, daemon=True)
+    thread.start()
+
 @app.get("/health")
 def health_check():
     return {"status": "ok"}
@@ -72,11 +89,12 @@ def chat_endpoint(req: ChatRequest):
                 route="general-info",
                 sources=[]
             )
-        print(f"Workflow error: {e}")
+        print(f"[ERROR] Workflow RuntimeError: {e}")
+        traceback.print_exc()
         raise HTTPException(status_code=500, detail="An internal server error occurred while processing the request.")
     except Exception as e:
-        # Avoid leaking stack traces to the frontend
-        print(f"Workflow error: {e}")
+        print(f"[ERROR] Workflow Exception: {e}")
+        traceback.print_exc()
         raise HTTPException(status_code=500, detail="An internal server error occurred while processing the request.")
     
     # Extract values from state

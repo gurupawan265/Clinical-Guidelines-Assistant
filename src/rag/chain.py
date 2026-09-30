@@ -47,14 +47,23 @@ prompt = PromptTemplate.from_template(PROMPT_TEMPLATE)
 RELEVANCE_THRESHOLD = 1.2  # L2 distance: lower is better.
 DISCLAIMER = "\n\n**Medical information disclaimer:** This response is for general informational purposes only and is not a substitute for professional medical advice, diagnosis, or treatment."
 
+import time
+
 def retrieve_and_gate(query: str) -> dict:
     """
     Performs similarity search with scores.
     If the best score > RELEVANCE_THRESHOLD, returns a rejection flag.
     Otherwise, formats and returns the context.
     """
+    t_open_start = time.time()
     vectorstore = get_vector_store()
+    t_open_end = time.time()
+    print(f"[RAG] Vectorstore retrieved/opened in {t_open_end - t_open_start:.2f} seconds")
+
+    t_ret_start = time.time()
     docs_and_scores = vectorstore.similarity_search_with_score(query, k=4)
+    t_ret_end = time.time()
+    print(f"[RAG] Retrieval completed in {t_ret_end - t_ret_start:.2f} seconds")
     
     print(f"\n[Gate] Scores for '{query}':")
     for doc, score in docs_and_scores:
@@ -109,7 +118,10 @@ def conditional_generate(inputs: dict) -> dict:
         }
     
     prompt_val = prompt.invoke({"context": retrieval["context"], "question": query})
+    t_groq_start = time.time()
     raw_response = llm.invoke(prompt_val).content
+    t_groq_end = time.time()
+    print(f"[RAG] Groq generation completed in {t_groq_end - t_groq_start:.2f} seconds")
     
     safe_response = output_guardrail(raw_response).strip()
     
