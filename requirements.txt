@@ -17,3 +17,6 @@ fastapi
 uvicorn
 python-dotenv
 langchain-groq
+peft==0.21.1
+accelerate==1.15.0
+huggingface-hub==1.33.0
