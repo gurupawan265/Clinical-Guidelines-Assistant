@@ -16,12 +16,27 @@ export interface SendChatResponse {
   sources: ChatSource[];
 }
 
-function getApiUrl(): string {
-  const baseUrl = import.meta.env.VITE_API_BASE_URL?.trim();
-  if (!baseUrl) {
-    throw new Error('The chat service is not configured yet. Please try again later.');
+const DEFAULT_PROD_API_URL = 'https://clinical-guidelines-assistant.onrender.com';
+
+function getApiBaseUrl(): string {
+  const envUrl = import.meta.env.VITE_API_BASE_URL?.trim();
+  if (envUrl && envUrl !== 'http://localhost:8000') {
+    return envUrl.replace(/\/+$/, '');
   }
-  return `${baseUrl.replace(/\/+$/, '')}/chat`;
+
+  // If running in browser and NOT on localhost / 127.0.0.1, fallback to production Render backend URL
+  if (typeof window !== 'undefined') {
+    const hostname = window.location.hostname;
+    if (hostname !== 'localhost' && hostname !== '127.0.0.1') {
+      return DEFAULT_PROD_API_URL;
+    }
+  }
+
+  return (envUrl || 'http://localhost:8000').replace(/\/+$/, '');
+}
+
+function getApiUrl(): string {
+  return `${getApiBaseUrl()}/chat`;
 }
 
 function isChatRoute(value: unknown): value is ChatRoute {
@@ -30,7 +45,7 @@ function isChatRoute(value: unknown): value is ChatRoute {
 
 function parseChatResponse(value: unknown): SendChatResponse {
   if (!value || typeof value !== 'object') {
-    throw new Error('The chat service returned an unexpected response.');
+    throw new Error('The chat service returned an invalid response format.');
   }
 
   const candidate = value as Record<string, unknown>;
@@ -50,22 +65,59 @@ function parseChatResponse(value: unknown): SendChatResponse {
 }
 
 export async function sendChatMessage(payload: SendChatRequest): Promise<SendChatResponse> {
-  const response = await fetch(getApiUrl(), {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload),
-  });
+  const controller = new AbortController();
+  // 75 second timeout to accommodate Render free-tier cold starts (~50s delay)
+  const timeoutId = setTimeout(() => controller.abort(), 75000);
 
-  if (!response.ok) {
-    throw new Error(`The chat service could not respond (${response.status}). Please try again.`);
-  }
-
-  let body: unknown;
   try {
-    body = await response.json();
-  } catch {
-    throw new Error('The chat service returned unreadable data. Please try again.');
-  }
+    const url = getApiUrl();
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+      signal: controller.signal,
+    });
 
-  return parseChatResponse(body);
+    clearTimeout(timeoutId);
+
+    if (!response.ok) {
+      if (response.status === 502 || response.status === 503 || response.status === 504) {
+        throw new Error(
+          `Backend service is currently starting up or temporarily unavailable (HTTP ${response.status}). Please wait a few moments and try again.`
+        );
+      }
+      let errDetail = '';
+      try {
+        const errorJson = await response.json();
+        if (errorJson && typeof errorJson.detail === 'string') {
+          errDetail = `: ${errorJson.detail}`;
+        }
+      } catch {
+        // ignore error parse failure
+      }
+      throw new Error(`Backend returned HTTP ${response.status}${errDetail}`);
+    }
+
+    let body: unknown;
+    try {
+      body = await response.json();
+    } catch {
+      throw new Error('The chat service returned unreadable JSON response.');
+    }
+
+    return parseChatResponse(body);
+  } catch (error: any) {
+    clearTimeout(timeoutId);
+    if (error.name === 'AbortError') {
+      throw new Error(
+        'Backend request timed out. The server may be waking up from a cold start — please try sending your question again.'
+      );
+    }
+    if (error instanceof TypeError && error.message.includes('fetch')) {
+      throw new Error(
+        `Could not connect to backend service at ${getApiBaseUrl()}. Please check your connection or CORS configuration.`
+      );
+    }
+    throw error;
+  }
 }

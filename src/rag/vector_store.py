@@ -26,7 +26,11 @@ def get_embeddings_model():
             if _embeddings_model is None:
                 print("[RAG] Initializing embedding model...")
                 t0 = time.time()
-                _embeddings_model = HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
+                _embeddings_model = HuggingFaceEmbeddings(
+                    model_name="sentence-transformers/all-MiniLM-L6-v2",
+                    model_kwargs={'device': 'cpu'},
+                    encode_kwargs={'normalize_embeddings': True}
+                )
                 print(f"[RAG] Embedding model initialized in {time.time() - t0:.2f} seconds")
     return _embeddings_model
 
@@ -107,19 +111,10 @@ def build_vector_store() -> Chroma:
 
 def get_retriever():
     """Returns a retriever interface for the vector store."""
-    if not os.path.exists(CHROMA_DB_DIR) or not os.listdir(CHROMA_DB_DIR):
-        raise FileNotFoundError(
-            "Chroma database not found. Run:\npython src/rag/vector_store.py"
-        )
-    embeddings = get_embeddings_model()
-    vectorstore = Chroma(
-        collection_name="clinical_guidelines",
-        embedding_function=embeddings,
-        persist_directory=CHROMA_DB_DIR
-    )
-    # Return the top 4 most relevant chunks
+    vectorstore = get_vector_store()
     return vectorstore.as_retriever(search_kwargs={"k": 4})
 
 if __name__ == "__main__":
     # Running this file directly builds the database
     build_vector_store()
+
