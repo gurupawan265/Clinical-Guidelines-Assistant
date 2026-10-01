@@ -58,6 +58,28 @@ class ChatResponse(BaseModel):
 def health_check():
     return {"status": "ok"}
 
+@app.get("/test-groq")
+def test_groq():
+    groq_key = os.environ.get("GROQ_API_KEY")
+    if not groq_key:
+        return {"status": "error", "message": "GROQ_API_KEY environment variable is missing on server"}
+    try:
+        from src.rag.chain import llm
+        res = llm.invoke("Hi").content
+        return {"status": "ok", "response": res}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
+@app.get("/test-chroma")
+def test_chroma():
+    try:
+        from src.rag.vector_store import get_vector_store
+        vs = get_vector_store()
+        docs = vs.similarity_search("asthma", k=1)
+        return {"status": "ok", "docs_count": len(docs)}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
 @app.post("/chat", response_model=ChatResponse)
 def chat_endpoint(req: ChatRequest):
     if not req.message or not req.conversation_id:
