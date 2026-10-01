@@ -2,6 +2,11 @@
 Chroma initialization, indexing, and retrieval logic.
 """
 import os
+import torch
+torch.set_num_threads(1)
+torch.set_num_interop_threads(1)
+torch.set_grad_enabled(False)
+
 from typing import List
 from langchain_core.documents import Document
 from langchain_text_splitters import RecursiveCharacterTextSplitter
